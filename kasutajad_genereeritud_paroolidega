@@ -1,15 +1,30 @@
 #!/bin/bash
 #
 # kasutajad_genereeritud_paroolidega - paroolide genereerimine ja logimine
-# (Ülesanne 5)
+# (Ülesanne 5 ja Ülesanne 6)
 # Skript võtab parameetrina faili, kus igal real on üks kasutajanimi.
 # Igale kasutajale genereeritakse pwgen käsuga 8 sümboli pikkune parool,
 # kasutaja lisatakse koos kodukataloogi ja parooliga süsteemi ning
 # kasutajanimi ja parool salvestatakse logifaili kujul kasutaja:parool.
 # Kõik vajalik on selle skripti sees - teisi skripte välja ei kutsuta.
 #
-# Kasutamine: sudo sh kasutajad_genereeritud_paroolidega failinimi
+# Kasutamine (ainult root kasutajana, mitte sudo kaudu):
+#   sh kasutajad_genereeritud_paroolidega failinimi
 #
+
+# --- Ülesanne 6: root kasutaja õiguste kontroll ---
+# id -u annab skripti käivitava kasutaja UID-i, root kasutaja UID on 0
+if [ "$(id -u)" -ne 0 ]; then
+    echo "Skripti võib käivitada ainult root kasutaja!"
+    exit 1
+fi
+# sudo kaudu käivitamisel on olemas keskkonnamuutuja SUDO_USER
+# (kasutaja, kes sudo käivitas) - sellisel juhul keelame skripti töö
+if [ -n "$SUDO_USER" ]; then
+    echo "Skripti käivitamine sudo kaudu (kasutaja $SUDO_USER) on keelatud!"
+    echo "Logi sisse root kasutajana ja käivita skript uuesti."
+    exit 1
+fi
 
 # logifail, kuhu salvestatakse loodud kasutajad koos paroolidega
 logifail=loodud_kasutajad_paroolidega
