@@ -1,0 +1,63 @@
+#!/bin/bash
+#
+# kasutajad_ja_paroolid - kasutajad ja paroolid eraldi failides (Ülesanne 4)
+# Skript võtab parameetritena kaks faili: esimeses on kasutajanimed ja
+# teises nende paroolid (sama rea number = sama kasutaja).
+# Skript lisab kasutajad koos kodukataloogi ja parooliga süsteemi.
+# Kõik vajalik on selle skripti sees - teisi skripte välja ei kutsuta.
+#
+# Kasutamine: sudo sh kasutajad_ja_paroolid kasutajate_fail paroolide_fail
+#
+
+# 1. kontrollime parameetrite arvu
+if [ $# -ne 2 ]; then
+    echo "Kasutusjuhend: $0 kasutajate_fail paroolide_fail"
+    exit 1
+fi
+
+kasutajad=$1
+paroolid=$2
+
+# 2. kontrollime, et mõlemad failid on olemas ja loetavad
+for fail in "$kasutajad" "$paroolid"; do
+    if [ ! -f "$fail" -o ! -r "$fail" ]; then
+        echo "Faili $fail ei ole olemas või see pole loetav"
+        exit 1
+    fi
+done
+
+# 3. kontrollime, et failides on sama palju ridu
+#    (grep -c '' loeb ka viimase rea, mille lõpus pole reavahetust)
+k_arv=$(grep -c '' "$kasutajad")
+p_arv=$(grep -c '' "$paroolid")
+if [ "$k_arv" -ne "$p_arv" ]; then
+    echo "Failides on erinev arv ridu: kasutajaid $k_arv, paroole $p_arv"
+    exit 1
+fi
+
+# 4. paste ühendab kahe faili samad read kujule kasutajanimi:parool,
+#    IFS=: jagab rea uuesti kaheks muutujaks
+paste -d: "$kasutajad" "$paroolid" | while IFS=: read -r kasutajanimi parool; do
+    if [ -z "$kasutajanimi" ] || [ -z "$parool" ]; then
+        echo "Tühi kasutajanimi või parool - rida jäetakse vahele"
+        continue
+    fi
+    # kas selline kasutaja on juba olemas?
+    if id "$kasutajanimi" > /dev/null 2>&1; then
+        echo "Kasutaja $kasutajanimi on juba olemas"
+        continue
+    fi
+    # loome kasutaja koos kodukataloogiga (/etc/skel sisu kopeeritakse)
+    useradd "$kasutajanimi" -m -d "/home/$kasutajanimi" -s /bin/bash
+    if [ $? -ne 0 ]; then
+        echo "Probleem kasutaja $kasutajanimi lisamisega"
+        continue
+    fi
+    # lisame parooli (salvestatakse krüpteeritult /etc/shadow faili)
+    echo "$kasutajanimi:$parool" | chpasswd
+    if [ $? -eq 0 ]; then
+        echo "Kasutaja $kasutajanimi on lisatud koos parooliga"
+    else
+        echo "Kasutaja $kasutajanimi on lisatud, aga parooli lisamine ebaõnnestus"
+    fi
+done

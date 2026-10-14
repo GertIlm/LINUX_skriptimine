@@ -1,0 +1,42 @@
+#!/bin/bash
+#
+# kasutajad_failist - kasutajate lisamine failist (Ülesanne 2)
+# Skript võtab parameetrina failinime, kus igal real on üks kasutajanimi,
+# ja kutsub iga kasutaja lisamiseks välja skripti lisa_kasutaja
+#
+# Kasutamine: sudo sh kasutajad_failist failinimi
+#
+
+# kontrollime parameetrite arvu
+if [ $# -ne 1 ]; then
+    echo "Kasutusjuhend: $0 failinimi"
+    exit 1
+fi
+
+fail=$1
+
+# kontrollime, et fail on olemas ja loetav
+if [ -f "$fail" -a -r "$fail" ]; then
+    echo "Fail $fail on olemas, alustame kasutajate lisamist"
+else
+    echo "Faili $fail ei ole olemas või see pole loetav"
+    exit 1
+fi
+
+# skripti lisa_kasutaja otsime samast kaustast, kus asub see skript
+kaust=$(dirname "$0")
+if [ ! -f "$kaust/lisa_kasutaja" ]; then
+    echo "Skripti $kaust/lisa_kasutaja ei leitud"
+    exit 1
+fi
+
+# loeme faili rida haaval; "|| [ -n ... ]" on vajalik selleks, et loetaks
+# sisse ka viimane rida, kui peale viimast rida reavahetust pole
+while read -r kasutajanimi || [ -n "$kasutajanimi" ]; do
+    # tühjad read jätame vahele
+    if [ -z "$kasutajanimi" ]; then
+        continue
+    fi
+    # kutsume välja eelmises ülesandes tehtud skripti
+    sh "$kaust/lisa_kasutaja" "$kasutajanimi"
+done < "$fail"

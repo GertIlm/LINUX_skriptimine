@@ -1,0 +1,36 @@
+#!/bin/bash
+#
+# kustuta_kasutajad - abiskript: kustutab failis olevad kasutajad koos
+# kodukataloogiga (userdel -r). Faili read võivad olla kujul "kasutaja"
+# või "kasutaja:parool" - arvesse läheb ainult kasutajanimi.
+#
+# Kasutamine: sudo sh kustuta_kasutajad failinimi
+#
+
+if [ $# -ne 1 ]; then
+    echo "Kasutusjuhend: $0 failinimi"
+    exit 1
+fi
+
+if [ ! -r "$1" ]; then
+    echo "Faili $1 ei ole olemas või see pole loetav"
+    exit 1
+fi
+
+while IFS=: read -r kasutajanimi parool || [ -n "$kasutajanimi" ]; do
+    if [ -z "$kasutajanimi" ]; then
+        continue
+    fi
+    if ! id "$kasutajanimi" > /dev/null 2>&1; then
+        echo "Kasutajat $kasutajanimi ei ole olemas"
+        continue
+    fi
+    # turvalisuse mõttes ei kustuta süsteemikasutajaid (UID < 1000)
+    # ega kasutajat, kes skripti sudo kaudu käivitas
+    if [ "$(id -u "$kasutajanimi")" -lt 1000 ] || [ "$kasutajanimi" = "$SUDO_USER" ]; then
+        echo "Kasutajat $kasutajanimi ei kustutata"
+        continue
+    fi
+    userdel -r "$kasutajanimi" 2> /dev/null
+    echo "Kasutaja $kasutajanimi on kustutatud"
+done < "$1"

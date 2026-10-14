@@ -1,0 +1,51 @@
+#!/bin/bash
+#
+# kasutajad_failist_parooliga - kasutajad paroolidega failist (Ülesanne 3)
+# Faili iga rida on kujul kasutajanimi:parool (parool on failis avatud kujul).
+# Skript loob kasutaja skriptiga lisa_kasutaja ja lisab seejärel kasutajale
+# parooli - chpasswd salvestab parooli krüpteeritult /etc/shadow faili
+#
+# Kasutamine: sudo sh kasutajad_failist_parooliga failinimi
+#
+
+if [ $# -ne 1 ]; then
+    echo "Kasutusjuhend: $0 failinimi"
+    exit 1
+fi
+
+fail=$1
+
+if [ -f "$fail" -a -r "$fail" ]; then
+    echo "Fail $fail on olemas, alustame kasutajate lisamist"
+else
+    echo "Faili $fail ei ole olemas või see pole loetav"
+    exit 1
+fi
+
+kaust=$(dirname "$0")
+if [ ! -f "$kaust/lisa_kasutaja" ]; then
+    echo "Skripti $kaust/lisa_kasutaja ei leitud"
+    exit 1
+fi
+
+# IFS=: jagab rea kooloni kohalt kaheks muutujaks: kasutajanimi ja parool
+while IFS=: read -r kasutajanimi parool || [ -n "$kasutajanimi" ]; do
+    if [ -z "$kasutajanimi" ]; then
+        continue
+    fi
+    if [ -z "$parool" ]; then
+        echo "Kasutajal $kasutajanimi puudub failis parool - jätame vahele"
+        continue
+    fi
+    # loome kasutaja eelmises ülesandes tehtud skriptiga
+    sh "$kaust/lisa_kasutaja" "$kasutajanimi"
+    if [ $? -eq 0 ]; then
+        # lisame parooli: chpasswd loeb sisendist rea kujul kasutaja:parool
+        echo "$kasutajanimi:$parool" | chpasswd
+        if [ $? -eq 0 ]; then
+            echo "Kasutajale $kasutajanimi on parool lisatud"
+        else
+            echo "Probleem kasutajale $kasutajanimi parooli lisamisega"
+        fi
+    fi
+done < "$fail"
