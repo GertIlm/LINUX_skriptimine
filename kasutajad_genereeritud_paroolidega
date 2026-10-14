@@ -1,0 +1,70 @@
+#!/bin/bash
+#
+# kasutajad_genereeritud_paroolidega - paroolide genereerimine ja logimine
+# (Ülesanne 5)
+# Skript võtab parameetrina faili, kus igal real on üks kasutajanimi.
+# Igale kasutajale genereeritakse pwgen käsuga 8 sümboli pikkune parool,
+# kasutaja lisatakse koos kodukataloogi ja parooliga süsteemi ning
+# kasutajanimi ja parool salvestatakse logifaili kujul kasutaja:parool.
+# Kõik vajalik on selle skripti sees - teisi skripte välja ei kutsuta.
+#
+# Kasutamine: sudo sh kasutajad_genereeritud_paroolidega failinimi
+#
+
+# logifail, kuhu salvestatakse loodud kasutajad koos paroolidega
+logifail=loodud_kasutajad_paroolidega
+
+if [ $# -ne 1 ]; then
+    echo "Kasutusjuhend: $0 failinimi"
+    exit 1
+fi
+
+fail=$1
+
+if [ -f "$fail" -a -r "$fail" ]; then
+    echo "Fail $fail on olemas, alustame kasutajate lisamist"
+else
+    echo "Faili $fail ei ole olemas või see pole loetav"
+    exit 1
+fi
+
+# kontrollime, kas parooli genereerimise käsk pwgen on süsteemis olemas,
+# puudumise korral paigaldame selle
+if ! command -v pwgen > /dev/null 2>&1; then
+    echo "pwgen puudub, paigaldame selle"
+    apt-get update -qq && apt-get install -y -qq pwgen > /dev/null
+    if ! command -v pwgen > /dev/null 2>&1; then
+        echo "pwgen paigaldamine ebaõnnestus"
+        exit 1
+    fi
+fi
+
+# logifailis on paroolid, seega lubame seda lugeda ainult omanikul
+touch "$logifail"
+chmod 600 "$logifail"
+
+while read -r kasutajanimi || [ -n "$kasutajanimi" ]; do
+    if [ -z "$kasutajanimi" ]; then
+        continue
+    fi
+    if id "$kasutajanimi" > /dev/null 2>&1; then
+        echo "Kasutaja $kasutajanimi on juba olemas"
+        continue
+    fi
+    # genereerime ühe 8 sümboli pikkuse parooli
+    parool=$(pwgen 8 1)
+    # loome kasutaja koos kodukataloogiga (/etc/skel sisu kopeeritakse)
+    useradd "$kasutajanimi" -m -d "/home/$kasutajanimi" -s /bin/bash
+    if [ $? -ne 0 ]; then
+        echo "Probleem kasutaja $kasutajanimi lisamisega"
+        continue
+    fi
+    # määrame parooli ja salvestame kasutaja:parool logifaili
+    echo "$kasutajanimi:$parool" | chpasswd
+    if [ $? -eq 0 ]; then
+        echo "$kasutajanimi:$parool" >> "$logifail"
+        echo "Kasutaja $kasutajanimi on lisatud, parool on salvestatud faili $logifail"
+    else
+        echo "Probleem kasutajale $kasutajanimi parooli lisamisega"
+    fi
+done < "$fail"
