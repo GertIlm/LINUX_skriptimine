@@ -99,6 +99,68 @@ if [ "$PHP" -eq 0 ]; then
         echo "Viga: $TEENUS paigaldamine ebaõnnestus!"
         exit 1
     fi
+
+    # --------------------------------------------------------------
+    # 4. Konfiguratsioonifailide muudatused
+    # Paigaldatud PHP versioon (nt 8.2) on vajalik mooduli nime ja
+    # konfiguratsioonifailide teede jaoks (/etc/php/8.2/...).
+    # --------------------------------------------------------------
+    PHP_VERSIOON=$(php -r 'echo PHP_MAJOR_VERSION . "." . PHP_MINOR_VERSION;')
+    echo "Paigaldatud PHP versioon: $PHP_VERSIOON"
+
+    # 4.1 apache2 php moodul peab olema lubatud.
+    # Paigaldamisel lubatakse see tavaliselt automaatselt, kuid
+    # kontrollime üle. php moodul töötab ainult koos mpm_prefork-iga,
+    # seega vajadusel lülitame mpm_event välja.
+    if apache2ctl -M 2>/dev/null | grep -q "php"; then
+        echo "apache2 php moodul (php$PHP_VERSIOON) on lubatud."
+    else
+        echo "Lubame apache2 php mooduli (php$PHP_VERSIOON)..."
+        a2dismod mpm_event
+        a2enmod mpm_prefork php$PHP_VERSIOON
+    fi
+
+    # 4.2 DirectoryIndex (fail dir.conf) määrab, millist faili
+    # kataloogi avamisel esimesena näidatakse. Tõstame index.php
+    # esimeseks, et php leht oleks eelistatud index.html ees.
+    # Enne muutmist teeme failist varukoopia (.bak).
+    DIRCONF=/etc/apache2/mods-available/dir.conf
+    if grep -q "DirectoryIndex index.php" $DIRCONF; then
+        echo "$DIRCONF: index.php on juba esimesel kohal."
+    else
+        cp $DIRCONF $DIRCONF.bak
+        sed -i -e 's/ index\.php//' -e 's/DirectoryIndex/DirectoryIndex index.php/' $DIRCONF
+        echo "Muudetud $DIRCONF: $(grep DirectoryIndex $DIRCONF | tr -s ' \t' ' ')"
+    fi
+
+    # 4.3 php.ini - määrame ajavööndi (date.timezone), muidu
+    # kasutavad php kuupäevafunktsioonid UTC aega.
+    PHPINI=/etc/php/$PHP_VERSIOON/apache2/php.ini
+    if [ -f "$PHPINI" ]; then
+        cp $PHPINI $PHPINI.bak
+        sed -i 's|^;*date\.timezone *=.*|date.timezone = Europe/Tallinn|' $PHPINI
+        echo "Muudetud $PHPINI: $(grep '^date.timezone' $PHPINI)"
+    fi
+
+    # 4.4 Muudatuste rakendamiseks taaskäivitame veebiserveri
+    systemctl restart $VEEBISERVER
+    echo "$VEEBISERVER taaskäivitatud: $(systemctl is-active $VEEBISERVER)"
+
+    # --------------------------------------------------------------
+    # 5. Kontrollime, et veebiserver käivitab php koodi
+    # Loome testlehe ja pärime selle veebiserverist. Päringu teeme
+    # php enda abil (file_get_contents), nii ei ole vaja curl-i.
+    # Kui php ei tööta, tagastaks veebiserver lähtekoodi "<?php ...".
+    # --------------------------------------------------------------
+    # (printf '%s\n' kirjutab teksti muutmata kujul - sh/dash echo
+    # tõlgendaks muidu "\n" reavahetuseks)
+    printf '%s\n' '<?php echo "PHP töötab! Versioon: " . phpversion() . "\n"; ?>' > $TESTLEHT
+    VASTUS=$(php -r "echo @file_get_contents('$TESTURL');")
+    if echo "$VASTUS" | grep -q "PHP töötab"; then
+        echo "Kontroll OK - $TESTURL vastas: $VASTUS"
+    else
+        echo "Hoiatus: $TESTURL ei tagastanud oodatud vastust - kontrolli $VEEBISERVER ja $TEENUS seadistust."
+    fi
 fi
 
 # Skript lõpetas töö edukalt - väljumiskood 0
