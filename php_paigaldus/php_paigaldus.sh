@@ -161,6 +161,18 @@ if [ "$PHP" -eq 0 ]; then
     else
         echo "Hoiatus: $TESTURL ei tagastanud oodatud vastust - kontrolli $VEEBISERVER ja $TEENUS seadistust."
     fi
+
+elif [ "$PHP" -eq 1 ]; then
+    # "ok installed" leiti 1 kord -> php on juba paigaldatud
+    echo "$TEENUS on juba paigaldatud."
+
+    # Kontrollime olemasolu - näitame php asukohta ja versiooni
+    which php
+    php -v | head -n 1
+
+    # Näitame, kas apache2 php moodul on laetud ja veebiserver töötab
+    apache2ctl -M 2>/dev/null | grep "php"
+    echo "$VEEBISERVER: $(systemctl is-active $VEEBISERVER)"
 fi
 
 # Skript lõpetas töö edukalt - väljumiskood 0
