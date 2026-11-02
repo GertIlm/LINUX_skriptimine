@@ -44,3 +44,26 @@ VEEBISERVER=apache2
 # Testleht, millega kontrollime, et veebiserver käivitab php koodi
 TESTLEHT=/var/www/html/test.php
 TESTURL=http://localhost/test.php
+
+# ------------------------------------------------------------------
+# 1. Õiguste kontroll
+# Pakettide paigaldamiseks ja konfiguratsioonifailide muutmiseks on
+# vaja root õigusi. Käsk "id -u" annab kasutaja ID, root ID on 0.
+# ------------------------------------------------------------------
+if [ "$(id -u)" -ne 0 ]; then
+    echo "Viga: skripti peab käivitama root kasutaja (või sudo abil)."
+    exit 1
+fi
+
+# ------------------------------------------------------------------
+# 2. Kontrollime, kas php on paigaldatud
+# dpkg-query -W -f='${Status}' näitab paketi olekut, paigaldatud
+# paketi korral on väljund "install ok installed".
+# 2>/dev/null peidab veateate "no packages found matching ...",
+# kui sellist paketti masinas üldse ei ole.
+# grep -c loeb, mitu korda leiti tekst "ok installed":
+#   1 -> php on paigaldatud
+#   0 -> php ei ole paigaldatud
+# Tulemuse salvestame muutujasse PHP.
+# ------------------------------------------------------------------
+PHP=$(dpkg-query -W -f='${Status}' $TEENUS 2>/dev/null | grep -c "ok installed")
