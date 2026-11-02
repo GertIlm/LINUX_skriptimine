@@ -67,3 +67,39 @@ fi
 # Tulemuse salvestame muutujasse PHP.
 # ------------------------------------------------------------------
 PHP=$(dpkg-query -W -f='${Status}' $TEENUS 2>/dev/null | grep -c "ok installed")
+
+# ------------------------------------------------------------------
+# 3. Tingimuslause - muutuja väärtuse järgi otsustame, mida teha
+# ------------------------------------------------------------------
+if [ "$PHP" -eq 0 ]; then
+    # "ok installed" ei leitud ühtegi korda -> php puudub
+    echo "$TEENUS ei ole paigaldatud."
+
+    # php tööks veebis on vaja veebiserverit - kui apache2 puudub,
+    # lisame selle paigaldatavate pakettide hulka
+    APACHE2=$(dpkg-query -W -f='${Status}' $VEEBISERVER 2>/dev/null | grep -c "ok installed")
+    if [ "$APACHE2" -eq 0 ]; then
+        echo "Veebiserverit $VEEBISERVER ei leitud - paigaldame ka selle."
+        LISAPAKETID="$VEEBISERVER $LISAPAKETID"
+    fi
+
+    echo "Paigaldame $TEENUS ja vajalikud lisad: $LISAPAKETID"
+
+    # Uuendame pakettide nimekirja ja paigaldame paketid.
+    # DEBIAN_FRONTEND=noninteractive - paigaldus ei esita küsimusi
+    # -y vastab paigaldaja küsimusele automaatselt "jah"
+    apt-get update
+    DEBIAN_FRONTEND=noninteractive apt-get install -y $TEENUS $LISAPAKETID
+
+    # $? sisaldab eelmise käsu väljumiskoodi (exit code):
+    # 0 = käsk õnnestus, muu väärtus = tekkis viga
+    if [ $? -eq 0 ]; then
+        echo "$TEENUS on edukalt paigaldatud."
+    else
+        echo "Viga: $TEENUS paigaldamine ebaõnnestus!"
+        exit 1
+    fi
+fi
+
+# Skript lõpetas töö edukalt - väljumiskood 0
+exit 0
