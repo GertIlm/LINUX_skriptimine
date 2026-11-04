@@ -163,3 +163,90 @@ if [ -n "$PUUDU" ]; then
     apt-get install -y -qq $PUUDU > /dev/null
     ok "Abipaketid paigaldatud:$PUUDU"
 fi
+
+# ===========================================================================
+# 2. MySQL Server 8.0 (Oracle MySQL APT repositoorium)
+# ===========================================================================
+pealkiri "2. MySQL Server ${MYSQL_SERIES}"
+
+# MariaDB ja Oracle MySQL ei saa korraga olla - MariaDB puhul katkestame
+if pakett_olemas mariadb-server; then
+    viga "Süsteemis on MariaDB (mariadb-server). Töö nõuab Oracle MySQL ${MYSQL_SERIES}-t."
+    viga "Eemalda MariaDB käsitsi ja käivita skript uuesti."
+    exit 1
+fi
+
+# Kontroll: kas MySQL Server 8.0 on paigaldatud?
+MYSQL_PAKETI_VER=$(paketi_versioon mysql-community-server)
+if [ -z "$MYSQL_PAKETI_VER" ]; then
+    MYSQL_PAKETI_VER=$(paketi_versioon mysql-server)
+fi
+
+if [[ "$MYSQL_PAKETI_VER" == ${MYSQL_SERIES}.* ]] || \
+   { command -v mysqld > /dev/null && mysqld --version 2>/dev/null | grep -q "Ver ${MYSQL_SERIES}\."; }; then
+    # JAH -> teavita ja ära paigalda uuesti
+    ok "MySQL ${MYSQL_SERIES} on juba paigaldatud ($(mysql --version | awk '{print $3}'))."
+
+elif [ -n "$MYSQL_PAKETI_VER" ]; then
+    # Mõni muu MySQL versioon - üle ei kirjuta
+    hoiatus "MySQL on paigaldatud, kuid versioon on ${MYSQL_PAKETI_VER} (mitte ${MYSQL_SERIES}). Ei paigalda üle."
+
+else
+    # EI -> paigalda MySQL 8.0
+    info "MySQL ${MYSQL_SERIES} puudub - paigaldan Oracle MySQL APT repositooriumist."
+
+    # 2.1 debconf-set-selections: vastused mysql-apt-config ja mysql-community-server
+    #     paketi küsimustele, et paigaldus oleks mitteinteraktiivne.
+    #     - repo-distro / repo-codename:  Debian 12 (bookworm)
+    #     - select-server:                MySQL Server 8.0
+    #     - select-connectors:            mittevajalikud MySQL Tools/Connectors paketid välja
+    #     - select-product:               Ok (valikute kinnitamine)
+    #     - root-pass / re-root-pass:     MySQL root-parool
+    #     - default-auth-override:        autentimise valik (caching_sha2_password)
+    info "Eelseadistan debconf vastused (debconf-set-selections)"
+    debconf-set-selections <<EOF
+mysql-apt-config mysql-apt-config/repo-distro select ${DISTRO}
+mysql-apt-config mysql-apt-config/repo-codename select ${KOODNIMI}
+mysql-apt-config mysql-apt-config/select-server select mysql-${MYSQL_SERIES}
+mysql-apt-config mysql-apt-config/select-connectors select Disabled
+mysql-apt-config mysql-apt-config/select-product select Ok
+mysql-community-server mysql-community-server/root-pass password ${MYSQL_ROOT_PASS}
+mysql-community-server mysql-community-server/re-root-pass password ${MYSQL_ROOT_PASS}
+mysql-community-server mysql-server/default-auth-override select Use Strong Password Encryption (RECOMMENDED)
+EOF
+
+    # 2.2 Oracle MySQL APT konfiguratsioonipakett
+    if pakett_olemas mysql-apt-config; then
+        info "mysql-apt-config on juba olemas - seadistan uuesti (MySQL ${MYSQL_SERIES})"
+        dpkg-reconfigure -f noninteractive mysql-apt-config
+    else
+        info "Laadin alla ${MYSQL_APT_DEB}"
+        wget -q -O "/tmp/${MYSQL_APT_DEB}" "$MYSQL_APT_URL"
+        info "Paigaldan konfiguratsioonipaketi"
+        apt-get install -y -qq "/tmp/${MYSQL_APT_DEB}" > /dev/null
+        rm -f "/tmp/${MYSQL_APT_DEB}"
+    fi
+
+    # Kontroll: kas repo seadistati MySQL 8.0 peale?
+    if grep -rqs "mysql-${MYSQL_SERIES}" /etc/apt/sources.list.d/; then
+        ok "Oracle MySQL APT repositoorium seadistatud (mysql-${MYSQL_SERIES})."
+    else
+        viga "MySQL APT repositooriumi seadistamine ebaõnnestus (mysql-${MYSQL_SERIES} puudub)."
+        exit 1
+    fi
+
+    # 2.3 Paketiloendi uuendus ja mysql-server paigaldus
+    info "Uuendan paketiloendit"
+    apt-get update -qq
+    info "Paigaldan mysql-server (see võib võtta mõne minuti)"
+    apt-get install -y -qq mysql-server > /dev/null
+
+    # Kontrolli tulemust
+    if [[ "$(paketi_versioon mysql-community-server)" == ${MYSQL_SERIES}.* ]]; then
+        ok "MySQL paigaldatud: $(mysql --version | awk '{print $3}')"
+        MYSQL_PAIGALDATI="jah"
+    else
+        viga "MySQL ${MYSQL_SERIES} paigaldamine ebaõnnestus."
+        exit 1
+    fi
+fi
