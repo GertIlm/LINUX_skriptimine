@@ -406,3 +406,68 @@ else
     echo "<?php phpinfo(); ?>" > "$INFO_FAIL"
     ok "Loodud PHP testfail $INFO_FAIL"
 fi
+
+# ===========================================================================
+# 5. Kontrollid ja lõpuraport
+# ===========================================================================
+pealkiri "5. Kontrollid"
+
+SERVERI_IP=$(hostname -I | awk '{print $1}')
+
+# Kas Apache vastab ja kas PHP kood käivitub? (wget kohalikult)
+if wget -q -O - "http://localhost/" | grep -q "LAMP server töötab"; then
+    ok "http://${SERVERI_IP}/ vastab (index.html)."
+else
+    hoiatus "http://${SERVERI_IP}/ ei vasta ootuspäraselt."
+fi
+if wget -q -O - "http://localhost/info.php" | grep -q "PHP Version"; then
+    ok "http://${SERVERI_IP}/info.php töötab (PHP kood käivitub)."
+else
+    hoiatus "http://${SERVERI_IP}/info.php ei tööta (PHP kood ei käivitu)."
+fi
+
+APACHE_VER=$(apache2 -v 2>/dev/null | awk -F': ' '/Server version/ {print $2}')
+PHP_VERSIOON=$(php -r 'echo PHP_VERSION;' 2>/dev/null || true)
+MYSQL_VERSIOON=$(mysql --version 2>/dev/null | awk '{print $3}')
+
+fail_olemas() { [ -f "$1" ] && echo "$1 - olemas" || echo "$1 - PUUDUB"; }
+if [ -f "$MYCNF" ]; then
+    MYCNF_OLEK="$MYCNF - olemas (õigused $(stat -c '%a' "$MYCNF"))"
+else
+    MYCNF_OLEK="$MYCNF - PUUDUB"
+fi
+
+# NB! Raportis ei kuvata MySQL root-parooli.
+cat <<EOF
+
+========== LAMP REPORT ==========
+
+Apache2:
+Version: ${APACHE_VER:-puudub}
+Status: $(teenuse_olek apache2)
+Autostart: $(teenuse_autost apache2)
+
+PHP:
+Version: ${PHP_VERSIOON:-puudub}
+
+MySQL:
+Version: ${MYSQL_VERSIOON:-puudub}
+Status: $(teenuse_olek mysql)
+Autostart: $(teenuse_autost mysql)
+
+Apache default page:
+$(fail_olemas "$INDEX_FAIL")
+
+PHP test page:
+$(fail_olemas "$INFO_FAIL")
+
+MySQL root configuration:
+${MYCNF_OLEK}
+
+Veebilehed:
+http://${SERVERI_IP}/
+http://${SERVERI_IP}/info.php
+
+Lõpp: $(date "+%Y-%m-%d %H:%M:%S")
+=================================
+EOF
