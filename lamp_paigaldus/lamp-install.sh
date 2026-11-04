@@ -293,3 +293,60 @@ if [ -f "$MYCNF" ] && mysql -e "SELECT VERSION();" > /dev/null 2>&1; then
 else
     hoiatus "mysql klient ei saanud $MYCNF abil ühendust."
 fi
+
+# ===========================================================================
+# 3. Apache2
+# ===========================================================================
+pealkiri "3. Apache2"
+
+# Kontroll: kas apache2 pakett on paigaldatud? (dpkg-query + grep)
+if pakett_olemas apache2; then
+    # JAH -> teavita ja ära paigalda uuesti
+    ok "Apache2 on juba paigaldatud ($(apache2 -v | awk -F': ' '/Server version/ {print $2}'))."
+else
+    # EI -> paigalda Apache2
+    info "Apache2 puudub - paigaldan."
+    apt-get install -y -qq apache2 > /dev/null
+    if pakett_olemas apache2; then
+        ok "Apache2 paigaldatud: $(apache2 -v | awk -F': ' '/Server version/ {print $2}')"
+    else
+        viga "Apache2 paigaldamine ebaõnnestus."
+        exit 1
+    fi
+fi
+
+# Apache2 peab olema active ja enabled
+teenus_toole apache2
+
+# Apache vaikimisi veebileht
+info "Kirjutan üle Apache vaikimisi lehe $INDEX_FAIL"
+cat > "$INDEX_FAIL" <<EOF
+<!DOCTYPE html>
+<html lang="et">
+<head>
+    <meta charset="UTF-8">
+    <title>LAMP server töötab!</title>
+    <style>
+        body { font-family: Arial, sans-serif; background: #f2f4f7; color: #222; margin: 40px; }
+        .kast { background: #fff; max-width: 600px; padding: 24px 32px; border-radius: 8px;
+                box-shadow: 0 2px 6px rgba(0,0,0,.15); }
+        h1 { color: #2e7d32; }
+        td { padding: 4px 16px 4px 0; }
+    </style>
+</head>
+<body>
+    <div class="kast">
+        <h1>LAMP server töötab!</h1>
+        <p>LAMP paigaldus õnnestus (Apache2 + PHP ${PHP_VER} + MySQL ${MYSQL_SERIES}).</p>
+        <table>
+            <tr><td><b>Õpilane:</b></td><td>${OPILANE}</td></tr>
+            <tr><td><b>Grupp:</b></td><td>${GRUPP}</td></tr>
+            <tr><td><b>Paigaldatud:</b></td><td>${PAIGALDUSE_AEG}</td></tr>
+            <tr><td><b>Server:</b></td><td>$(hostname)</td></tr>
+        </table>
+        <p><a href="info.php">PHP info leht (info.php)</a></p>
+    </div>
+</body>
+</html>
+EOF
+ok "Apache vaikimisi leht muudetud."
