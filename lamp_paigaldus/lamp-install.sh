@@ -1,0 +1,143 @@
+#!/bin/bash
+#
+# lamp-install.sh - üks skript LAMP-i paigaldamiseks
+#                   Apache2 + PHP 8.x + MySQL Server 8.0 (Oracle MySQL, mitte MariaDB)
+#
+# Autor:    Gert-Daniel Ilm, VOCO (IT-süsteemide spetsialist)
+# Kuupäev:  04.11.2026
+# Süsteem:  Debian 12 (bookworm), testitud Proxmoxi LXC-s 22330 gert-bash-lamp
+#
+# Kasutus (root-kasutajana):
+#     chmod +x lamp-install.sh
+#     ./lamp-install.sh
+#
+#     Soovi korral saab MySQL root-parooli ise ette anda:
+#     MYSQL_ROOT_PASS='MinuParool123' ./lamp-install.sh
+#     Kui parooli ei anta, genereerib skript juhusliku parooli ja salvestab
+#     selle ainult faili /root/.my.cnf (õigused 600).
+#
+# Tööpõhimõte:
+#     Enne iga põhikomponendi (MySQL 8.0, Apache2, PHP 8.x) paigaldamist
+#     kontrollitakse, kas see on juba olemas:
+#
+#         KONTROLL -> Kas paigaldatud? -> JAH -> teavita kasutajat
+#                                      -> EI  -> PAIGALDA -> KONTROLLI TULEMUST
+#
+#     Kõik paigaldused on mitteinteraktiivsed (DEBIAN_FRONTEND=noninteractive,
+#     MySQL-i vastused antakse ette debconf-set-selections abil).
+#     Skripti võib käivitada korduvalt - juba olemasolevat tarkvara uuesti ei paigaldata.
+
+set -e
+export DEBIAN_FRONTEND=noninteractive
+
+# ---------------------------------------------------------------------------
+# Muutujad
+# ---------------------------------------------------------------------------
+
+OPILANE="Gert-Daniel Ilm"           # õpilase ees- ja perekonnanimi
+GRUPP="ITS24"                       # grupp/klass
+
+PHP_VER="8.2"                       # Debian 12 vaikimisi PHP versioon
+MYSQL_SERIES="8.0"                  # nõutud MySQL Serveri versioon
+MYSQL_APT_DEB="mysql-apt-config_0.8.40-1_all.deb"
+MYSQL_APT_URL="https://dev.mysql.com/get/${MYSQL_APT_DEB}"
+
+WEB_DIR="/var/www/html"
+INDEX_FAIL="${WEB_DIR}/index.html"
+INFO_FAIL="${WEB_DIR}/info.php"
+MYCNF="/root/.my.cnf"
+
+ABIPAKETID="wget ca-certificates gnupg debconf-utils lsb-release"
+PHP_PAKETID="php${PHP_VER} php${PHP_VER}-cli php${PHP_VER}-common php${PHP_VER}-mysql libapache2-mod-php${PHP_VER}"
+
+PAIGALDUSE_AEG=$(date "+%Y-%m-%d %H:%M:%S")
+
+# MySQL root-parool: keskkonnamuutujast või genereeritakse juhuslikult.
+# Parooli ei kuvata kunagi ekraanile.
+if [ -n "${MYSQL_ROOT_PASS:-}" ]; then
+    PAROOL_ANTUD="jah"
+else
+    PAROOL_ANTUD="ei"
+    MYSQL_ROOT_PASS=$(tr -dc 'A-Za-z0-9' < /dev/urandom 2>/dev/null | head -c 20)
+fi
+
+MYSQL_PAIGALDATI="ei"               # muutub "jah", kui MySQL paigaldati selle käivitusega
+PHP_PAIGALDATI="ei"                 # muutub "jah", kui PHP-d/mooduleid paigaldati (-> Apache restart)
+
+# ---------------------------------------------------------------------------
+# Abifunktsioonid
+# ---------------------------------------------------------------------------
+
+info()    { echo -e "\e[1;34m[INFO]\e[0m $*"; }
+ok()      { echo -e "\e[1;32m[ OK ]\e[0m $*"; }
+hoiatus() { echo -e "\e[1;33m[HOIATUS]\e[0m $*"; }
+viga()    { echo -e "\e[1;31m[VIGA]\e[0m $*" >&2; }
+pealkiri() { echo; echo -e "\e[1m==== $* ====\e[0m"; }
+
+# Kas pakett on paigaldatud? (dpkg-query + grep)
+# Tagastab 0, kui paketi olek on "install ok installed".
+pakett_olemas() {
+    dpkg-query -W -f='${Status}' "$1" 2>/dev/null | grep -q "install ok installed"
+}
+
+# Paketi paigaldatud versioon (tühi, kui paketti pole)
+paketi_versioon() {
+    if pakett_olemas "$1"; then
+        dpkg-query -W -f='${Version}' "$1"
+    fi
+}
+
+# Teenuse olek: active/inactive ja enabled/disabled
+# (|| true, et set -e ei katkestaks skripti, kui teenus ei tööta)
+teenuse_olek()   { systemctl is-active "$1" 2>/dev/null || true; }
+teenuse_autost() { systemctl is-enabled "$1" 2>/dev/null || true; }
+
+# Tagab, et teenus töötab ja käivitub koos süsteemiga
+teenus_toole() {
+    local teenus="$1"
+    if [ "$(teenuse_autost "$teenus")" != "enabled" ]; then
+        info "Lülitan sisse teenuse $teenus automaatse käivitumise"
+        systemctl enable "$teenus" >/dev/null 2>&1
+    fi
+    if [ "$(teenuse_olek "$teenus")" != "active" ]; then
+        info "Käivitan teenuse $teenus"
+        systemctl start "$teenus"
+    fi
+    if [ "$(teenuse_olek "$teenus")" = "active" ] && [ "$(teenuse_autost "$teenus")" = "enabled" ]; then
+        ok "Teenus $teenus: active, enabled"
+    else
+        viga "Teenus $teenus ei tööta korralikult: $(teenuse_olek "$teenus"), $(teenuse_autost "$teenus")"
+        exit 1
+    fi
+}
+
+# ---------------------------------------------------------------------------
+# Eelkontrollid
+# ---------------------------------------------------------------------------
+
+if [ -z "$BASH_VERSION" ]; then
+    echo "Käivita skript bashiga: ./lamp-install.sh või bash lamp-install.sh" >&2
+    exit 1
+fi
+
+if [ "$EUID" -ne 0 ]; then
+    viga "Skript tuleb käivitada root-kasutajana (sudo -i või su -)."
+    exit 1
+fi
+
+# HOME ja PATH võivad Proxmoxi konsoolis puudulikud olla:
+# mysql klient otsib .my.cnf faili $HOME alt, apache2/a2enmod asuvad /usr/sbin all
+export HOME="${HOME:-/root}"
+export PATH="$PATH:/usr/local/sbin:/usr/sbin:/sbin"
+
+. /etc/os-release
+DISTRO="${ID}"
+KOODNIMI="${VERSION_CODENAME}"
+if [ "$DISTRO" != "debian" ] || [ "$KOODNIMI" != "bookworm" ]; then
+    hoiatus "Skript on tehtud Debian 12 (bookworm) jaoks, see süsteem on: ${PRETTY_NAME}"
+fi
+
+echo
+echo "LAMP paigaldus - Apache2 + PHP ${PHP_VER} + MySQL ${MYSQL_SERIES}"
+echo "Õpilane: ${OPILANE}, grupp: ${GRUPP}"
+echo "Algus:   ${PAIGALDUSE_AEG}"
