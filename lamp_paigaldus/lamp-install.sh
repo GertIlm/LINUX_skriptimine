@@ -350,3 +350,59 @@ cat > "$INDEX_FAIL" <<EOF
 </html>
 EOF
 ok "Apache vaikimisi leht muudetud."
+
+# ===========================================================================
+# 4. PHP 8.x
+# ===========================================================================
+pealkiri "4. PHP 8.x"
+
+# Kontroll: kas PHP 8.x on paigaldatud?
+if command -v php > /dev/null && [ "$(php -r 'echo PHP_MAJOR_VERSION;')" = "8" ]; then
+    # JAH -> kuva versioon ja ära paigalda uuesti
+    ok "PHP 8.x on juba paigaldatud (versioon $(php -r 'echo PHP_VERSION;'))."
+else
+    # EI -> paigalda PHP ja vajalikud moodulid
+    info "PHP 8.x puudub - paigaldan: $PHP_PAKETID"
+    apt-get install -y -qq $PHP_PAKETID > /dev/null
+    if command -v php > /dev/null; then
+        ok "PHP paigaldatud: $(php -r 'echo PHP_VERSION;')"
+    else
+        viga "PHP paigaldamine ebaõnnestus."
+        exit 1
+    fi
+    PHP_PAIGALDATI="jah"
+fi
+
+# Kontrollime ka kõiki vajalikke mooduleid - paigaldame ainult puuduvad
+PUUDU=""
+for p in $PHP_PAKETID; do
+    pakett_olemas "$p" || PUUDU="$PUUDU $p"
+done
+if [ -n "$PUUDU" ]; then
+    info "Paigaldan puuduvad PHP paketid/moodulid:$PUUDU"
+    apt-get install -y -qq $PUUDU > /dev/null
+    PHP_PAIGALDATI="jah"
+else
+    ok "PHP moodulid olemas: $PHP_PAKETID"
+fi
+
+# Apache PHP moodul peab olema sisse lülitatud
+if ! apache2ctl -M 2>/dev/null | grep -q "php_module"; then
+    info "Lülitan sisse Apache mooduli php${PHP_VER}"
+    a2enmod -q "php${PHP_VER}" > /dev/null
+    PHP_PAIGALDATI="jah"
+fi
+
+# Pärast PHP paigaldamist taaskäivita Apache2
+if [ "$PHP_PAIGALDATI" = "jah" ]; then
+    info "Taaskäivitan Apache2"
+    systemctl restart apache2
+fi
+
+# PHP testfail
+if [ -f "$INFO_FAIL" ]; then
+    ok "PHP testfail $INFO_FAIL on juba olemas."
+else
+    echo "<?php phpinfo(); ?>" > "$INFO_FAIL"
+    ok "Loodud PHP testfail $INFO_FAIL"
+fi
