@@ -141,3 +141,25 @@ echo
 echo "LAMP paigaldus - Apache2 + PHP ${PHP_VER} + MySQL ${MYSQL_SERIES}"
 echo "Õpilane: ${OPILANE}, grupp: ${GRUPP}"
 echo "Algus:   ${PAIGALDUSE_AEG}"
+
+# ===========================================================================
+# 1. Skripti ettevalmistamine: paketiloend ja abipaketid
+# ===========================================================================
+pealkiri "1. Paketiloend ja abipaketid"
+
+info "Uuendan paketiloendit (apt-get update)"
+apt-get update -qq
+
+PUUDU=""
+for p in $ABIPAKETID; do
+    if pakett_olemas "$p"; then
+        ok "Abipakett $p on juba paigaldatud."
+    else
+        PUUDU="$PUUDU $p"
+    fi
+done
+if [ -n "$PUUDU" ]; then
+    info "Paigaldan puuduvad abipaketid:$PUUDU"
+    apt-get install -y -qq $PUUDU > /dev/null
+    ok "Abipaketid paigaldatud:$PUUDU"
+fi
