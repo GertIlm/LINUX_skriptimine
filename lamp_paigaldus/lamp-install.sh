@@ -250,3 +250,46 @@ EOF
         exit 1
     fi
 fi
+
+# 2.4 MySQL teenus: töötab ja käivitub automaatselt
+if pakett_olemas mysql-community-server || pakett_olemas mysql-server; then
+    teenus_toole mysql
+fi
+
+# 2.5 /root/.my.cnf - root saab kasutada mysql klienti ilma parooli sisestamata
+kirjuta_mycnf() {
+    # umask 077 -> fail luuakse kohe ainult root-ile loetavana
+    ( umask 077
+      cat > "$MYCNF" <<EOF
+[client]
+host=localhost
+user=root
+password=${MYSQL_ROOT_PASS}
+EOF
+    )
+    chmod 600 "$MYCNF"
+    chown root:root "$MYCNF"
+}
+
+if [ "$MYSQL_PAIGALDATI" = "jah" ]; then
+    # MySQL paigaldati praegu -> parool on teada, loome faili
+    kirjuta_mycnf
+    ok "Loodud $MYCNF (õigused 600)."
+elif [ -f "$MYCNF" ]; then
+    # Fail on olemas eelmisest käivitusest - ei muuda (parool peab jääma samaks)
+    chmod 600 "$MYCNF"
+    ok "$MYCNF on juba olemas - ei muuda."
+elif [ "$PAROOL_ANTUD" = "jah" ]; then
+    kirjuta_mycnf
+    ok "Loodud $MYCNF etteantud parooliga (õigused 600)."
+else
+    hoiatus "$MYCNF puudub ja MySQL root-parool pole teada."
+    hoiatus "Käivita: MYSQL_ROOT_PASS='parool' ./lamp-install.sh"
+fi
+
+# Kontroll: kas mysql töötab ilma parooli küsimata?
+if [ -f "$MYCNF" ] && mysql -e "SELECT VERSION();" > /dev/null 2>&1; then
+    ok "mysql klient töötab ilma parooli sisestamata ($MYCNF)."
+else
+    hoiatus "mysql klient ei saanud $MYCNF abil ühendust."
+fi
