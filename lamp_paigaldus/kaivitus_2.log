@@ -1,0 +1,64 @@
+
+LAMP paigaldus - Apache2 + PHP 8.2 + MySQL 8.0
+Õpilane: Gert-Daniel Ilm, grupp: ITS24
+Algus:   2026-11-04 09:26:08
+
+==== 1. Paketiloend ja abipaketid ====
+[INFO] Uuendan paketiloendit (apt-get update)
+[ OK ] Abipakett wget on juba paigaldatud.
+[ OK ] Abipakett ca-certificates on juba paigaldatud.
+[ OK ] Abipakett gnupg on juba paigaldatud.
+[ OK ] Abipakett debconf-utils on juba paigaldatud.
+[ OK ] Abipakett lsb-release on juba paigaldatud.
+
+==== 2. MySQL Server 8.0 ====
+[ OK ] MySQL 8.0 on juba paigaldatud (8.0.46).
+[ OK ] Teenus mysql: active, enabled
+[ OK ] /root/.my.cnf on juba olemas - ei muuda.
+[ OK ] mysql klient töötab ilma parooli sisestamata (/root/.my.cnf).
+
+==== 3. Apache2 ====
+[ OK ] Apache2 on juba paigaldatud (Apache/2.4.68 (Debian)).
+[ OK ] Teenus apache2: active, enabled
+[INFO] Kirjutan üle Apache vaikimisi lehe /var/www/html/index.html
+[ OK ] Apache vaikimisi leht muudetud.
+
+==== 4. PHP 8.x ====
+[ OK ] PHP 8.x on juba paigaldatud (versioon 8.2.35).
+[ OK ] PHP moodulid olemas: php8.2 php8.2-cli php8.2-common php8.2-mysql libapache2-mod-php8.2
+[ OK ] PHP testfail /var/www/html/info.php on juba olemas.
+
+==== 5. Kontrollid ====
+[ OK ] http://192.168.40.52/ vastab (index.html).
+[ OK ] http://192.168.40.52/info.php töötab (PHP kood käivitub).
+
+========== LAMP REPORT ==========
+
+Apache2:
+Version: Apache/2.4.68 (Debian)
+Status: active
+Autostart: enabled
+
+PHP:
+Version: 8.2.35
+
+MySQL:
+Version: 8.0.46
+Status: active
+Autostart: enabled
+
+Apache default page:
+/var/www/html/index.html - olemas
+
+PHP test page:
+/var/www/html/info.php - olemas
+
+MySQL root configuration:
+/root/.my.cnf - olemas (õigused 600)
+
+Veebilehed:
+http://192.168.40.52/
+http://192.168.40.52/info.php
+
+Lõpp: 2026-11-04 09:26:11
+=================================
